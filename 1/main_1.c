@@ -3,13 +3,13 @@
 
 #include <OpenCL/opencl.h>
 
-#define RANGE 10
+#define RANGE 999
 
 void errchk(cl_int error, char *location){
 	if (error != CL_SUCCESS){
-		printf("Error at %s\n", location);
+		printf("Error at %s; error %d\n", location, error);
 		exit(error);
-	}
+    }
 }
 
 int main(){
@@ -19,7 +19,7 @@ int main(){
 	cl_command_queue queue;
 	cl_device_id device;
 
-	error = oclGetPlatformID(&platform);
+	error = clGetPlatformIDs(1, &platform, NULL);
 	errchk(error, "oclGetPlatformID");
 
 	error = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &device, NULL);
@@ -28,7 +28,7 @@ int main(){
 	context = clCreateContext(0, 1, &device, NULL, NULL, &error);
 	errchk(error, "clCreateContext");
 
-	queue = clCreateCommandQueue(context, device, 0, error);
+	queue = clCreateCommandQueue(context, device, 0, &error);
 	errchk(error, "clCreateCommandQueue");
 
 	//Allocate some local memory space for the results
@@ -39,15 +39,19 @@ int main(){
 			sizeof(cl_int) * RANGE, NULL, &error);
 	errchk(error, "clCreateBuffer");
 
-	size_t src_size;
-	const char *path = shrFindFilePath("1_kernel.cl", NULL);
-	const char *source = oclLoadProgSource(path, "", &src_size);
+	FILE *src = fopen("kernel_1.cl", "r");
+	fseek(src, 0, SEEK_END);
+	size_t src_size = ftell(src);
+	char *source = (char *)malloc(sizeof(char)*(src_size+1));
+	rewind(src);
+	fread(source, sizeof(char), src_size, src);
+	source[src_size] = '\0';
+    
 	cl_program program = clCreateProgramWithSource(context, 1, &source,
 							&src_size, &error);
 	errchk(error, "clCreateProgramWithSource");
 
 	error = clBuildProgram(program, 1, &device, NULL, NULL, NULL);
-	errchk(error, "clBuildProgram");
 
 	char *build_log;
 	size_t log_size;
@@ -57,8 +61,11 @@ int main(){
 	clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG,
 				       log_size, build_log, NULL);
 	build_log[log_size] = '\0';
-	printf("BUILD LOG:\n%s\n", build_log);
+	if (error != CL_SUCCESS)
+		printf("BUILD LOG:\n%s\n", build_log);
 	free(build_log);
+    
+	errchk(error, "clBuildProgram");
 
 	cl_kernel div_kernel = clCreateKernel(program, "divisible", &error);
 	errchk(error, "clCreateKernel");
@@ -66,22 +73,24 @@ int main(){
 	error = clSetKernelArg(div_kernel, 0, sizeof(cl_mem), &divs);
 	errchk(error, "clSetKernelArg 0");
 	size_t rng = RANGE;
-	error = clSetKernelArg(div_kernel, 0, sizeof(size_t), &rng);
+	error = clSetKernelArg(div_kernel, 1, sizeof(size_t), &rng);
 	errchk(error, "clSetKernelArg 1");
 
-	const size_t local_ws = 512;
-	const size_t global_ws = shrRoundUp(local_ws, RANGE);
+	const size_t local_ws = 256;
+	size_t global_ws = 0;
+	while (global_ws < RANGE)
+		global_ws += local_ws;
 	error = clEnqueueNDRangeKernel(queue, div_kernel, 1, NULL, &global_ws,
 					      &local_ws, 0, NULL, NULL);
 	errchk(error, "clEnqueueNDRangeKernel");
 
-	clEnqueueReadBuffer(queue, divs, CL_TRUE, 0, sizeof(CL_INT) * RANGE, loc_divs, 0, NULL, NULL);
+	clEnqueueReadBuffer(queue, divs, CL_TRUE, 0, sizeof(cl_int) * RANGE, loc_divs, 0, NULL, NULL);
 
 	int i;
 	int count = 0;
-	for(i=0; i < RANGE; i ++)
-		 if (loc_divs[i] == 1)
-		 	count ++;
+	for(i=0; i < RANGE; i++)
+		if (loc_divs[i] == 1)
+			count+= (i+1);
 	printf("%d\n", count);
 
 	free(loc_divs);

@@ -3,8 +3,8 @@
 
 #include <OpenCL/opencl.h>
 
-#define RANGE 999
-#define MAX 4000000
+#define RANGE 10000
+#define MAX 400000000
 
 void errchk(cl_int error, char *location){
 	if (error != CL_SUCCESS){

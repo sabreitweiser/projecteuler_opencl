@@ -1,19 +1,28 @@
-__kernel void fib(__global int *fib, const int num){
-	const int idx = get_global_id(0); //get id of executing thread
-	int tmp;
-	int fib1 = 1;
-	int fib2 = 1;
+bool is_pal(int n){
+	int lim = 10;
+	int order = 1;
+	while (lim <= n){
+		lim *= 10;
+		order++;
+	}
+	int tmp = 1;
 	int i;
-	for (i=2; (i<idx) && (fib2<num); i++){
-		  tmp = fib2;
-		  fib2 = fib1+fib2;
-		  fib1 = tmp;
+	for(i=0; i<order/2; i++){
+		 if ((n%(10*tmp) - n%tmp)/tmp != (n%lim - n%(lim/10))/(lim/10))
+		 	return false;
+		tmp *= 10;
+		lim /= 10;
 	}
-	if (fib2<num){
-		if (fib2%2 == 0){
-			fib[idx] = fib2;
-			return;
-		}
-	}
-	fib[idx] = 0;
+	return true;
+}
+
+__kernel void largest_pal(__global int *largest_pals){
+	const int idx = get_global_id(0); //get id of executing thread
+	const int n = idx+1;
+	int max = 0;
+	int i;
+	for(i=1; i<= n; i++)
+		if (is_pal(i*n))
+			max = i*n;
+	largest_pals[idx] = max;
 }

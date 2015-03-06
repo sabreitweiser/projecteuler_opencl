@@ -3,8 +3,7 @@
 
 #include <OpenCL/opencl.h>
 
-#define RANGE 10000
-#define MAX 400000000
+#define RANGE 999
 
 void errchk(cl_int error, char *location){
 	if (error != CL_SUCCESS){
@@ -33,14 +32,14 @@ int main(){
 	errchk(error, "clCreateCommandQueue");
 
 	//Allocate some local memory space for the results
-	int *loc_fibs = (int *)malloc(sizeof(int) * RANGE);
+	int *loc_largest_pals = (int *)malloc(sizeof(int) * RANGE);
 
 	//Allocate OpenCL memory for results
-	cl_mem fibs = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
+	cl_mem largest_pals = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
 			sizeof(cl_int) * RANGE, NULL, &error);
 	errchk(error, "clCreateBuffer");
 
-	FILE *src = fopen("kernel_2.cl", "r");
+	FILE *src = fopen("kernel_4.cl", "r");
 	fseek(src, 0, SEEK_END);
 	size_t src_size = ftell(src);
 	char *source = (char *)malloc(sizeof(char)*(src_size+1));
@@ -68,34 +67,36 @@ int main(){
     
 	errchk(error, "clBuildProgram");
 
-	cl_kernel fib_kernel = clCreateKernel(program, "fib", &error);
+	cl_kernel largest_pal_kernel = clCreateKernel(program, "largest_pal",
+							&error);
 	errchk(error, "clCreateKernel");
 
-	error = clSetKernelArg(fib_kernel, 0, sizeof(cl_mem), &fibs);
+	error = clSetKernelArg(largest_pal_kernel, 0, sizeof(cl_mem),
+				&largest_pals);
 	errchk(error, "clSetKernelArg 0");
-	size_t max = MAX;
-	error = clSetKernelArg(fib_kernel, 1, sizeof(size_t), &max);
-	errchk(error, "clSetKernelArg 1");
 
 	const size_t local_ws = 256;
 	size_t global_ws = 0;
 	while (global_ws < RANGE)
 		global_ws += local_ws;
-	error = clEnqueueNDRangeKernel(queue, fib_kernel, 1, NULL, &global_ws,
-					      &local_ws, 0, NULL, NULL);
+	error = clEnqueueNDRangeKernel(queue, largest_pal_kernel, 1, NULL,
+					&global_ws, &local_ws, 0, NULL, NULL);
 	errchk(error, "clEnqueueNDRangeKernel");
 
-	clEnqueueReadBuffer(queue, fibs, CL_TRUE, 0, sizeof(cl_int) * RANGE, loc_fibs, 0, NULL, NULL);
+	clEnqueueReadBuffer(queue, largest_pals, CL_TRUE, 0,
+				sizeof(cl_int) * RANGE,
+				loc_largest_pals, 0, NULL, NULL);
 
 	int i;
-	int count = 0;
+	int max = 0;
 	for(i=0; i < RANGE; i++)
-		count+= (loc_fibs[i]);
-	printf("%d\n", count);
+		if (loc_largest_pals[i] >= max)
+			max = loc_largest_pals[i];
+	printf("%d\n", max);
 
-	free(loc_fibs);
-	clReleaseKernel(fib_kernel);
+	free(loc_largest_pals);
+	clReleaseKernel(largest_pal_kernel);
 	clReleaseCommandQueue(queue);
 	clReleaseContext(context);
-	clReleaseMemObject(fibs);
+	clReleaseMemObject(largest_pals);
 }
